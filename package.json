@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-news",
-  "description": "",
-  "version": "0.0.1",
+  "description": "每日新闻 60s，获取后本地缓存",
+  "version": "0.1.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,13 +9,13 @@
     "dist"
   ],
   "license": "MIT",
-  "scripts": {},
   "keywords": [
-    "chatbot",
+    "news",
     "koishi",
     "plugin"
   ],
   "peerDependencies": {
-    "koishi": "^4.14.0"
+    "koishi": "^4.14.0",
+    "koishi-plugin-cron": "^2.0.5"
   }
 }
