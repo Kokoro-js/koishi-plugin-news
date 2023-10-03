@@ -60,7 +60,7 @@ export function apply(ctx: Context, config: Config) {
     if (date) {
       if (!isValidDate(date)) return '不是有效的日期';
       data = await ctx.database.get('news', date);
-    } else data = ctx.database.get('news', getCurrentDate());
+    } else data = await ctx.database.get('news', getCurrentDate());
     if (data.length != 0) {
       const img = data[0].img;
       return h('image', { url: 'data:image/jpg;base64,' + img });
