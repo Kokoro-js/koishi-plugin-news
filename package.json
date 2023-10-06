@@ -1,13 +1,20 @@
 {
   "name": "koishi-plugin-news",
   "description": "每日新闻 60s，获取后本地缓存",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kokoro-js/koishi-plugin-news.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Kokoro-js/koishi-plugin-news/issues"
+  },
   "license": "MIT",
   "keywords": [
     "news",
