@@ -1,4 +1,4 @@
-import { Context, h, Logger, Schema } from 'koishi';
+import { Context, h, Logger, Schema, Time } from 'koishi';
 import {} from 'koishi-plugin-cron';
 
 export const name = 'news';
@@ -17,6 +17,7 @@ export interface News {
 
 export interface Config {
   point: number[];
+  api: string;
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -26,23 +27,26 @@ export const Config: Schema<Config> = Schema.object({
   ])
     .default([8, 0])
     .description('小时，分钟，固定每天多少点发'),
+  api: Schema.string().role('link').default('https://api.03c3.cn/api/zb'),
 });
 
 export function apply(ctx: Context, config: Config) {
-  ctx.cron(`${config.point[1]} ${config.point[0]} * * *`, async () => {
-    let img;
-    const data = await ctx.database.get('news', getCurrentDate());
-    if (data.length != 0) {
-      img = data[0].img;
-    } else {
-      img = await getNews();
-      await ctx.database.create('news', {
-        time: getCurrentDate(),
-        img: img,
-      });
-    }
+  ctx.inject(['cron'], (ctx) => {
+    ctx.cron(`${config.point[1]} ${config.point[0]} * * *`, async () => {
+      let img;
+      const data = await ctx.database.get('news', getCurrentDate());
+      if (data.length != 0) {
+        img = data[0].img;
+      } else {
+        img = await getNews();
+        await ctx.database.create('news', {
+          time: getCurrentDate(),
+          img: img,
+        });
+      }
 
-    await ctx.broadcast(h('image', { url: 'data:image/jpg;base64,' + img }));
+      await ctx.broadcast(h('image', { url: 'data:image/jpg;base64,' + img }));
+    });
   });
 
   ctx.model.extend(
@@ -82,12 +86,7 @@ export function apply(ctx: Context, config: Config) {
   }
 
   function getCurrentDate(): string {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const formattedDate = `${year}-${month}-${day}`;
-    return formattedDate;
+    return Time.template('yyyy-MM-dd');
   }
 
   async function getNews(date?: string) {
@@ -96,7 +95,7 @@ export function apply(ctx: Context, config: Config) {
       const format = date.split('-');
       imageUrl += `/${format[0]}/${format[1]}/${date}.jpg`;
     } else {
-      imageUrl += '/latest.jpg';
+      imageUrl = config.api;
     }
 
     logger.info(`正在尝试获取${date}的${imageUrl}`);
