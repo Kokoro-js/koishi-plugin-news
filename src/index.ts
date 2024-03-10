@@ -1,8 +1,8 @@
-import { Context, h, Logger, Schema, Time } from 'koishi';
+import { Context, h, Schema, Time } from 'koishi';
 import {} from 'koishi-plugin-cron';
+import { createHash } from 'node:crypto';
 
 export const name = 'news';
-const logger = new Logger(name);
 
 declare module 'koishi' {
   interface Tables {
@@ -31,88 +31,101 @@ export const Config: Schema<Config> = Schema.object({
 });
 
 export function apply(ctx: Context, config: Config) {
+  const commonAPI = 'https://ravelloh.github.io/EverydayNews'; // + /2024/03/2024-03-08.jpg
   ctx.inject(['cron'], (ctx) => {
     ctx.cron(`${config.point[1]} ${config.point[0]} * * *`, async () => {
-      let img;
-      const data = await ctx.database.get('news', getCurrentDate());
-      if (data.length != 0) {
-        img = data[0].img;
-      } else {
-        img = await getNews();
-        await ctx.database.create('news', {
-          time: getCurrentDate(),
-          img: img,
-        });
-      }
-
-      await ctx.broadcast(h('image', { url: 'data:image/jpg;base64,' + img }));
+      let img = await getImage();
+      await ctx.broadcast(h('image', { url: `data:image/jpg;base64,${img}` }));
     });
   });
 
   ctx.model.extend(
     'news',
-    {
-      time: 'string',
-      img: 'text',
-    },
+    { time: 'string', img: 'text' },
     { primary: 'time' },
   );
 
   ctx.command('news [date:text]').action(async (_, date) => {
-    let data;
-    if (date) {
-      if (!isValidDate(date)) return '不是有效的日期';
-      data = await ctx.database.get('news', date);
-    } else data = await ctx.database.get('news', getCurrentDate());
-    if (data.length != 0) {
-      const img = data[0].img;
-      return h('image', { url: 'data:image/jpg;base64,' + img });
-    } else {
-      const img = await getNews(date);
-      await ctx.database.create('news', {
-        time: date || getCurrentDate(),
-        img: img,
-      });
-      return h('image', { url: 'data:image/jpg;base64,' + img });
+    if (date && isValidDate(date) == false) {
+      return '你输入的不是一个有效的日期噢，按照 2024-03-10 的格式。';
     }
+    let img;
+    try {
+      img = await getImage(date);
+    } catch (e) {
+      ctx.logger.error(e);
+      return e.message;
+    }
+    return h('image', { url: `data:image/jpg;base64,${img}` });
   });
 
-  function isValidDate(str: string) {
-    const pattern = /^\d{4}-\d{2}-\d{2}$/;
-    if (!pattern.test(str)) return false;
-
-    const date = new Date(str);
-    return !isNaN(date.getTime());
-  }
-
-  function getCurrentDate(): string {
-    return Time.template('yyyy-MM-dd');
-  }
-
-  async function getNews(date?: string) {
-    let imageUrl = 'https://ravelloh.github.io/EverydayNews';
+  async function getImage(date?: string): Promise<string> {
     if (date) {
-      const format = date.split('-');
-      imageUrl += `/${format[0]}/${format[1]}/${date}.jpg`;
-    } else {
-      imageUrl = config.api;
-    }
-
-    logger.info(`正在尝试获取${date}的${imageUrl}`);
-    try {
-      const response = await fetch(imageUrl);
-
-      // Check if the response is successful
-      if (!response.ok) {
-        logger.error(`HTTP error! Status: ${response.status}`);
+      let databaseImg = await ctx.database.get('news', date);
+      if (databaseImg.length !== 1) {
+        const time = date.split('-');
+        const img = await fetchNewsImage(
+          commonAPI + `/${time[0]}/${time[1]}/${date}.jpg`,
+        );
+        await ctx.database.create('news', { time: date, img });
+        return img;
       }
+      return databaseImg[0].img;
+    }
+    const img = await fetchNewsImage(ctx.config.api);
+    const yesterday = await ctx.database.get(
+      'news',
+      convertToYesterdayString(getCurrentDate()),
+    );
+    if (yesterday.length !== 0) {
+      const yesterdayImg = yesterday[0].img;
+      const yesterdayHash = getHashFromBase64(yesterdayImg);
+      const todayHash = getHashFromBase64(img);
+      if (yesterdayHash == todayHash)
+        throw Error('API 返回了和昨天相同的图片。');
+    }
+    await ctx.database.create('news', { time: date, img });
+    return img;
+  }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      return buffer.toString('base64');
+  async function fetchNewsImage(url: string): Promise<string> {
+    ctx.logger.info(`正在从 ${url} 获取图片`);
+    try {
+      const response = await ctx.http.get(url);
+      return Buffer.from(response).toString('base64');
     } catch (error) {
-      logger.error('Error fetching image:', error.message);
+      ctx.logger.error('Error fetching image:', error.message);
       throw error;
     }
   }
+}
+
+function convertToYesterdayString(date: string): string {
+  const dateParts = date.split('-').map((part) => parseInt(part, 10));
+  const year = dateParts[0];
+  const month = dateParts[1];
+  const day = dateParts[2];
+
+  const dateObj = new Date(year, month - 1, day);
+  dateObj.setDate(dateObj.getDate() - 1);
+
+  const yesterYear = dateObj.getFullYear();
+  const yesterMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const yesterDay = String(dateObj.getDate()).padStart(2, '0');
+
+  return `${yesterYear}-${yesterMonth}-${yesterDay}`;
+}
+
+function isValidDate(str: string): boolean {
+  const pattern = /^\d{4}-\d{2}-\d{2}$/;
+  return pattern.test(str) && !isNaN(new Date(str).getTime());
+}
+
+function getCurrentDate(): string {
+  return Time.template('yyyy-MM-dd');
+}
+
+function getHashFromBase64(base64: string): string {
+  const buffer = Buffer.from(base64, 'base64');
+  return createHash('sha256').update(buffer).digest('hex');
 }
