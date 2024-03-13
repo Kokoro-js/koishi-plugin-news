@@ -53,7 +53,7 @@ export function apply(ctx: Context, config: Config) {
     try {
       img = await getImage(date);
     } catch (e) {
-      ctx.logger.error(e);
+      ctx?.logger.error(e);
       return e.message;
     }
     return h('image', { url: `data:image/jpg;base64,${img}` });
@@ -72,6 +72,8 @@ export function apply(ctx: Context, config: Config) {
       }
       return databaseImg[0].img;
     }
+    let databaseImg = await ctx.database.get('news', getCurrentDate());
+    if (databaseImg.length == 1) return databaseImg[0].img;
     const img = await fetchNewsImage(ctx.config.api);
     const yesterday = await ctx.database.get(
       'news',
@@ -89,12 +91,12 @@ export function apply(ctx: Context, config: Config) {
   }
 
   async function fetchNewsImage(url: string): Promise<string> {
-    ctx.logger.info(`正在从 ${url} 获取图片`);
+    ctx?.logger.info(`正在从 ${url} 获取图片`);
     try {
       const response = await ctx.http.get(url);
       return Buffer.from(response).toString('base64');
     } catch (error) {
-      ctx.logger.error('Error fetching image:', error.message);
+      ctx?.logger.error('Error fetching image:', error.message);
       throw error;
     }
   }
