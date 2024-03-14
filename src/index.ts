@@ -74,6 +74,7 @@ export function apply(ctx: Context, config: Config) {
     }
     let databaseImg = await ctx.database.get('news', getCurrentDate());
     if (databaseImg.length == 1) return databaseImg[0].img;
+    date = getCurrentDate()
     const img = await fetchNewsImage(ctx.config.api);
     const yesterday = await ctx.database.get(
       'news',
