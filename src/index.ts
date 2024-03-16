@@ -86,7 +86,7 @@ export function apply(ctx: Context, config: Config) {
       if (yesterdayHash == todayHash)
         throw Error('API 返回了和昨天相同的图片。');
     }
-    await ctx.database.create('news', { time: date, img });
+    await ctx.database.create('news', { time: getCurrentDate(), img });
     return img;
   }
 
