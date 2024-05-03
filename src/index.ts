@@ -1,4 +1,4 @@
-import { Context, h, Schema, Time } from 'koishi';
+import { Context, h, Logger, Schema, Time } from 'koishi';
 import {} from 'koishi-plugin-cron';
 import { createHash } from 'node:crypto';
 
@@ -34,6 +34,7 @@ export const Config: Schema<Config> = Schema.object({
 
 export function apply(ctx: Context, config: Config) {
   const commonAPI = 'https://ravelloh.github.io/EverydayNews'; // + /2024/03/2024-03-08.jpg
+  const logger = ctx?.logger || new Logger(name);
   ctx.inject(['cron'], (ctx) => {
     ctx.cron(`${config.point[1]} ${config.point[0]} * * *`, async () => {
       let img = await getImage();
@@ -55,7 +56,7 @@ export function apply(ctx: Context, config: Config) {
     try {
       img = await getImage(date);
     } catch (e) {
-      ctx?.logger.error(e);
+      logger.error(e);
       return e.message;
     }
     return h('image', { url: `data:image/jpg;base64,${img}` });
@@ -89,6 +90,7 @@ export function apply(ctx: Context, config: Config) {
         throw Error('API 返回了和昨天相同的图片。');
     }
     await ctx.database.remove('news', {
+      // 字符串比较按词典顺序来比，格式一定比较天数一定正确。
       time: { $lt: convertToPastDateString(getCurrentDate(), config.days) },
     });
     await ctx.database.create('news', { time: getCurrentDate(), img });
@@ -96,12 +98,12 @@ export function apply(ctx: Context, config: Config) {
   }
 
   async function fetchNewsImage(url: string): Promise<string> {
-    ctx?.logger.info(`正在从 ${url} 获取图片`);
+    logger.info(`正在从 ${url} 获取图片`);
     try {
       const response = await ctx.http.get(url);
       return Buffer.from(response).toString('base64');
     } catch (error) {
-      ctx?.logger.error('Error fetching image:', error.message);
+      logger.error('Error fetching image:', error.message);
       throw error;
     }
   }
