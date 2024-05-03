@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-news",
   "description": "每日新闻 60s，获取后本地缓存",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [

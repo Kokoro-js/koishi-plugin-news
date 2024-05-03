@@ -17,6 +17,7 @@ export interface News {
 
 export interface Config {
   point: number[];
+  days: number;
   api: string;
 }
 
@@ -27,6 +28,7 @@ export const Config: Schema<Config> = Schema.object({
   ])
     .default([8, 0])
     .description('小时，分钟，固定每天多少点发'),
+  days: Schema.number().default(7).description('数据库保留多少天新闻'),
   api: Schema.string().role('link').default('https://api.03c3.cn/api/zb'),
 });
 
@@ -77,7 +79,7 @@ export function apply(ctx: Context, config: Config) {
     const img = await fetchNewsImage(ctx.config.api);
     const yesterday = await ctx.database.get(
       'news',
-      convertToYesterdayString(getCurrentDate()),
+      convertToPastDateString(getCurrentDate()),
     );
     if (yesterday.length !== 0) {
       const yesterdayImg = yesterday[0].img;
@@ -86,6 +88,9 @@ export function apply(ctx: Context, config: Config) {
       if (yesterdayHash == todayHash)
         throw Error('API 返回了和昨天相同的图片。');
     }
+    await ctx.database.remove('news', {
+      time: { $lt: convertToPastDateString(getCurrentDate(), config.days) },
+    });
     await ctx.database.create('news', { time: getCurrentDate(), img });
     return img;
   }
@@ -102,20 +107,20 @@ export function apply(ctx: Context, config: Config) {
   }
 }
 
-function convertToYesterdayString(date: string): string {
+function convertToPastDateString(date: string, days: number = 1): string {
   const dateParts = date.split('-').map((part) => parseInt(part, 10));
   const year = dateParts[0];
   const month = dateParts[1];
   const day = dateParts[2];
 
   const dateObj = new Date(year, month - 1, day);
-  dateObj.setDate(dateObj.getDate() - 1);
+  dateObj.setDate(dateObj.getDate() - days);
 
-  const yesterYear = dateObj.getFullYear();
-  const yesterMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const yesterDay = String(dateObj.getDate()).padStart(2, '0');
+  const pastYear = dateObj.getFullYear();
+  const pastMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const pastDay = String(dateObj.getDate()).padStart(2, '0');
 
-  return `${yesterYear}-${yesterMonth}-${yesterDay}`;
+  return `${pastYear}-${pastMonth}-${pastDay}`;
 }
 
 function isValidDate(str: string): boolean {
