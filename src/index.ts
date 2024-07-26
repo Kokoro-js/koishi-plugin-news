@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 
 export const name = 'news';
 
+export const inject = ['database']
+
 declare module 'koishi' {
   interface Tables {
     news: News;
