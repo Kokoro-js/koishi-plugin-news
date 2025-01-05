@@ -31,7 +31,7 @@ export const Config: Schema<Config> = Schema.object({
     .default([8, 0])
     .description('小时，分钟，固定每天多少点发'),
   days: Schema.number().default(7).description('数据库保留多少天新闻'),
-  api: Schema.string().role('link').default('https://api.03c3.cn/api/zb'),
+  api: Schema.string().role('link').default('http://dwz.2xb.cn/zaob'),
 });
 
 export function apply(ctx: Context, config: Config) {
@@ -102,10 +102,65 @@ export function apply(ctx: Context, config: Config) {
   async function fetchNewsImage(url: string): Promise<string> {
     logger.info(`正在从 ${url} 获取图片`);
     try {
-      const response = await ctx.http.get(url);
-      return Buffer.from(response).toString('base64');
+      // 尝试请求获取数据
+      const response = await ctx.http.get(url, { responseType: 'arraybuffer' });
+
+      // 判断是否为有效图片格式的工具函数
+      const isValidImage = (buffer: ArrayBuffer): boolean => {
+        const signatures = [
+          { ext: 'jpg', magic: [0xFF, 0xD8, 0xFF] },
+          { ext: 'png', magic: [0x89, 0x50, 0x4E, 0x47] },
+          { ext: 'gif', magic: [0x47, 0x49, 0x46] },
+          { ext: 'webp', magic: [0x52, 0x49, 0x46, 0x46] },
+        ];
+        const bufferView = new Uint8Array(buffer);
+        return signatures.some(sig => sig.magic.every((byte, index) => bufferView[index] === byte));
+      };
+
+      // 尝试将响应解析为 JSON
+      let parsedResponse;
+      try {
+        const textResponse = new TextDecoder('utf-8').decode(response); // 使用 TextDecoder 解码 ArrayBuffer
+        parsedResponse = JSON.parse(textResponse);
+
+        // 遍历 JSON 查找 HTTP 链接
+        const findHttpUrl = (obj: any): string | null => {
+          if (typeof obj === 'string' && obj.startsWith('http')) {
+            return obj;
+          } else if (typeof obj === 'object') {
+            for (const key in obj) {
+              const result = findHttpUrl(obj[key]);
+              if (result) return result;
+            }
+          }
+          return null;
+        };
+
+        const imageUrl = findHttpUrl(parsedResponse);
+        if (imageUrl) {
+          logger.info(`检测到 JSON 响应中的 HTTP 链接，尝试从 ${imageUrl} 获取图片`);
+          const imageResponse = await ctx.http.get(imageUrl, { responseType: 'arraybuffer' });
+          if (isValidImage(imageResponse)) {
+            return Buffer.from(imageResponse).toString('base64');
+          } else {
+            throw new Error('从链接获取的不是有效图片');
+          }
+        }
+
+        throw new Error('JSON 数据中未找到有效的图片链接');
+      } catch (jsonError) {
+        logger.warn('响应不是 JSON，继续检查是否为图片 buffer');
+      }
+
+      // 检查数据是否为图片 buffer
+      if (isValidImage(response)) {
+        logger.info('直接返回图片 buffer');
+        return Buffer.from(response).toString('base64');
+      }
+
+      throw new Error('数据既不是 JSON 也不是图片');
     } catch (error) {
-      logger.error('Error fetching image:', error.message);
+      logger.error('获取图片时出错:', error.message);
       throw error;
     }
   }
